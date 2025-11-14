@@ -10,7 +10,7 @@ const Buffer = struct {
     used: usize,
 };
 
-const Snapshot = struct {
+const Checkpoint = struct {
     buffer_idx: std.math.IntFittingRange(0, buffer_count - 1),
     used: usize,
 };
@@ -35,16 +35,16 @@ pub fn deinit(self: *Scratch) void {
     self.* = undefined;
 }
 
-/// create a snapshot to use with `restoreSnapshot`
-pub fn snapshot(self: *Scratch) Snapshot {
+/// create a checkpoint to use with `restoreCheckpoint`
+pub fn checkpoint(self: *Scratch) Checkpoint {
     return .{
         .buffer_idx = self.current_buffer_idx,
         .used = self.buffers[self.current_buffer_idx].used,
     };
 }
 
-/// free all allocations since snapshot
-pub fn restoreSnapshot(self: *Scratch, snap: Snapshot) void {
+/// free all allocations since checkpoint
+pub fn restoreCheckpoint(self: *Scratch, snap: Checkpoint) void {
     std.debug.assert(self.current_buffer_idx >= snap.buffer_idx);
     self.current_buffer_idx = snap.buffer_idx;
     self.buffers[self.current_buffer_idx].used = snap.used;
@@ -132,8 +132,8 @@ test Scratch {
         try std.heap.testAllocatorLargeAlignment(scratch.allocator());
 
         {
-            const cp = scratch.snapshot();
-            defer scratch.restoreSnapshot(cp);
+            const cp = scratch.checkpoint();
+            defer scratch.restoreCheckpoint(cp);
 
             try std.heap.testAllocator(scratch.allocator());
             try std.heap.testAllocatorAligned(scratch.allocator());
@@ -150,21 +150,21 @@ test Scratch {
         const rand = rand_state.random();
 
         {
-            const outer_cp = scratch.snapshot();
-            defer scratch.restoreSnapshot(outer_cp);
+            const outer_cp = scratch.checkpoint();
+            defer scratch.restoreCheckpoint(outer_cp);
 
-            var checkpoints: std.ArrayList(Scratch.Snapshot) = .empty;
+            var checkpoints: std.ArrayList(Scratch.Checkpoint) = .empty;
             defer checkpoints.deinit(std.testing.allocator);
             {
                 for (0..1e6) |_| {
                     switch (rand.uintLessThan(u8, 3)) {
-                        0 => try checkpoints.append(std.testing.allocator, scratch.snapshot()),
-                        1 => scratch.restoreSnapshot(checkpoints.pop() orelse continue),
+                        0 => try checkpoints.append(std.testing.allocator, scratch.checkpoint()),
+                        1 => scratch.restoreCheckpoint(checkpoints.pop() orelse continue),
                         2 => _ = scratch.allocator().rawAlloc(rand.int(u14), rand.enumValue(std.mem.Alignment), 0) orelse return error.OutOfMemory,
                         else => @panic(""),
                     }
                 }
-                while (checkpoints.pop()) |cp| scratch.restoreSnapshot(cp);
+                while (checkpoints.pop()) |cp| scratch.restoreCheckpoint(cp);
             }
         }
     }

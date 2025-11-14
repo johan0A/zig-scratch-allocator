@@ -106,7 +106,7 @@ fn resize(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: 
     return true;
 }
 
-fn allocator(self: *Scratch) Allocator {
+pub fn allocator(self: *Scratch) Allocator {
     return .{
         .ptr = @ptrCast(self),
         .vtable = &.{
